@@ -4,9 +4,9 @@
   <img src="docs/architecture.svg" alt="k8s-simple-app AWS EKS architecture diagram" width="100%"/>
 </p>
 
-A Node.js REST API deployed to Amazon EKS as a hands-on practice project. The
+A Node.js REST API deployed to Amazon EKS as a hands on practice project. The
 goal is pedagogical: every cloud, cluster, and workload primitive is visible
-and annotated, so you can trace a request end-to-end — from the public ALB,
+and annotated, so you can trace a request end-to-end from the public ALB,
 through the Service, into a pod, and out to a response.
 
 - **Infrastructure** — VPC, EKS, ECR, IRSA, and the AWS Load Balancer
@@ -14,8 +14,8 @@ through the Service, into a pod, and out to a response.
 - **Application** — an [Express REST API](app/src/server.js) packaged with a
   multi-stage [Dockerfile](app/Dockerfile) for a small, non-root runtime image.
 - **Workload** — deployed with raw [Kubernetes manifests](k8s/) (no Helm, no
-  Kustomize) so every field — probes, resource limits, security context, ALB
-  annotations — is explicit.
+  Kustomize) so every field probes, resource limits, security context, ALB
+  annotations is explicit.
 
 ## Table of contents
 
@@ -153,7 +153,7 @@ k8s-simple-app/
 - **Tools** —
   - `terraform` ≥ 1.6
   - `awscli` v2
-  - `kubectl` (version compatible with the cluster version — default is 1.30)
+  - `kubectl` (version compatible with the cluster version: default is 1.30)
   - `docker` (with buildx if you're on Apple Silicon)
   - `helm` (optional — only needed if you want to inspect the ALB controller
     release: `helm -n kube-system list`)
