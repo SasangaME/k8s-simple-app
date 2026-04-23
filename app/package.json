@@ -1,0 +1,16 @@
+{
+  "name": "k8s-simple-app",
+  "version": "1.0.0",
+  "description": "Node.js REST API for EKS practice",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: simple-app-config
+  namespace: simple-app
+data:
+  APP_NAME: "k8s-simple-app"
+  APP_ENV: "production"
+  PORT: "3000"
+  LOG_LEVEL: "info"
