@@ -41,8 +41,6 @@ spec:
           envFrom:
             - configMapRef:
                 name: simple-app-config
-            - secretRef:
-                name: simple-app-secret
           resources:
             requests:
               cpu: "100m"

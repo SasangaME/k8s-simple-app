@@ -39,7 +39,7 @@ through the Service, into a pod, and out to a response.
 - Creating an EKS cluster with Terraform (VPC + managed node group + addons)
 - Building and pushing a multi-arch-aware container image to ECR
 - Deployments with resource requests/limits and zero-downtime rolling updates
-- ConfigMaps for environment configuration and Secrets for credentials
+- ConfigMaps for environment configuration
 - ClusterIP Service for in-cluster traffic
 - Ingress backed by an ALB via the AWS Load Balancer Controller (IRSA-powered)
 - Liveness, readiness, and startup probes, wired to real HTTP endpoints
@@ -129,8 +129,7 @@ k8s-simple-app/
 │       └── server.js           # HTTP handlers + liveness/readiness + graceful shutdown
 ├── k8s/                        # Kubernetes manifests, applied in this order
 │   ├── namespace.yaml          # simple-app namespace
-│   ├── configmap.yaml          # non-secret env vars
-│   ├── secret.yaml             # demo-only base64 "credentials"
+│   ├── configmap.yaml          # app env vars
 │   ├── deployment.yaml         # pod spec, probes, securityContext, resources
 │   ├── service.yaml            # ClusterIP fronting the pods
 │   └── ingress.yaml            # ALB ingress with healthcheck annotations
@@ -171,7 +170,7 @@ A minimal Express server that exposes:
 | Method | Path         | Purpose                                                                 |
 |--------|--------------|-------------------------------------------------------------------------|
 | GET    | `/`          | Returns `{ message, env, hostname }` — hostname proves which pod served |
-| GET    | `/api/items` | Returns a tiny hard-coded list plus the resolved `DB_USER` (masked)     |
+| GET    | `/api/items` | Returns a tiny hard-coded list of items                                 |
 | GET    | `/healthz`   | Liveness endpoint — always `200` once the process is up                 |
 | GET    | `/readyz`    | Readiness endpoint — returns `503` for the first 3s after boot, then `200` |
 
@@ -184,8 +183,6 @@ runs):
 | `APP_NAME`    | ConfigMap          | `k8s-simple-app`| Returned by `/`                         |
 | `APP_ENV`     | ConfigMap          | `development`   | Returned by `/`                         |
 | `LOG_LEVEL`   | ConfigMap          | `info`          | (Reserved — not wired to a logger yet)  |
-| `DB_USER`     | Secret             | `unset`         | Echoed by `/api/items`                  |
-| `DB_PASSWORD` | Secret             | `unset`         | Presence detected; value masked as `***`|
 
 Graceful shutdown: `SIGTERM`/`SIGINT` stop accepting new connections and drain
 in-flight requests before exiting. This pairs with the Deployment's
@@ -214,15 +211,8 @@ every other manifest references it explicitly.
 
 ### [configmap.yaml](k8s/configmap.yaml)
 
-Non-secret app config (`APP_NAME`, `APP_ENV`, `PORT`, `LOG_LEVEL`). Injected
-into the container via `envFrom.configMapRef` in the Deployment.
-
-### [secret.yaml](k8s/secret.yaml)
-
-Demo Secret holding `DB_USER` / `DB_PASSWORD` as base64. **Do not put real
-secrets here and do not commit real credentials.** In production, replace
-this file with an External Secrets Operator `ExternalSecret` or the AWS
-Secrets and Configuration Provider (ASCP) for the Secrets Store CSI Driver.
+App config (`APP_NAME`, `APP_ENV`, `PORT`, `LOG_LEVEL`). Injected into the
+container via `envFrom.configMapRef` in the Deployment.
 
 ### [deployment.yaml](k8s/deployment.yaml)
 
@@ -341,13 +331,12 @@ sed -i.bak "s#ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/k8s-simple-app#${ECR_URL}#
 rm deployment.yaml.bak
 ```
 
-Apply manifests in dependency order (namespace first, then config + secret the
+Apply manifests in dependency order (namespace first, then the config the
 Deployment mounts, then the workload, then Service + Ingress):
 
 ```bash
 kubectl apply -f namespace.yaml
 kubectl apply -f configmap.yaml
-kubectl apply -f secret.yaml
 kubectl apply -f deployment.yaml
 kubectl apply -f service.yaml
 kubectl apply -f ingress.yaml
@@ -404,19 +393,21 @@ change these defaults:
 
 ## Operations
 
-Day-2 procedures — deploying new versions, rolling back, scaling, rotating
-secrets, upgrading the cluster, incident response, teardown — live in
-[RUNBOOK.md](RUNBOOK.md). That's also where the `kubectl` debugging
-cheatsheet and troubleshooting playbooks moved to.
+Day-2 procedures — deploying new versions, rolling back, scaling, upgrading
+the cluster, incident response, teardown — live in [RUNBOOK.md](RUNBOOK.md).
+That's also where the `kubectl` debugging cheatsheet and troubleshooting
+playbooks moved to.
 
 ## Production hardening notes
 
 This repo intentionally prioritizes clarity over production-readiness. Before
 running anything like this for real, at minimum:
 
-- **Secrets** — replace [k8s/secret.yaml](k8s/secret.yaml) with External
-  Secrets Operator or the Secrets Store CSI Driver sourcing from AWS Secrets
-  Manager or Parameter Store.
+- **Secrets** — this project currently has no Secret because it has no DB or
+  API keys to store. When you add one, don't commit a raw `Secret` manifest
+  with base64 values: source credentials from AWS Secrets Manager or
+  Parameter Store via the External Secrets Operator or the Secrets Store
+  CSI Driver.
 - **State backend** — uncomment the S3 backend block in
   [terraform/versions.tf](terraform/versions.tf), create the bucket + DynamoDB
   lock table once, then `terraform init -migrate-state`. Never share state

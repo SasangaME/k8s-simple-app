@@ -22,7 +22,6 @@ setup (Terraform apply, initial image push, manifest apply), see
 - [Restart pods without a code change](#restart-pods-without-a-code-change)
 - [Scale the application](#scale-the-application)
 - [Scale the node group](#scale-the-node-group)
-- [Rotate a secret](#rotate-a-secret)
 - [Update a ConfigMap value](#update-a-configmap-value)
 - [Upgrade the EKS cluster version](#upgrade-the-eks-cluster-version)
 - [Upgrade the AWS Load Balancer Controller](#upgrade-the-aws-load-balancer-controller)
@@ -147,8 +146,8 @@ only the last 5 revisions are retained — if you need older, restore from Git.
 
 ## Restart pods without a code change
 
-Useful after rotating a Secret/ConfigMap, or to clear process-local state.
-`envFrom` does **not** auto-reload — a restart is required.
+Useful after updating a ConfigMap, or to clear process-local state. `envFrom`
+does **not** auto-reload — a restart is required.
 
 ```bash
 kubectl -n simple-app rollout restart deploy/simple-app
@@ -194,36 +193,9 @@ Watch nodes join:
 kubectl get nodes -w
 ```
 
-## Rotate a secret
-
-Secrets are **not** hot-reloaded into running pods — after updating, restart
-the Deployment.
-
-```bash
-# Build a new base64-encoded value
-NEW_PW=$(echo -n 'new-password-here' | base64)
-
-# Option A — patch in place (no YAML change)
-kubectl -n simple-app patch secret simple-app-secret \
-  --type=merge \
-  -p "{\"data\":{\"DB_PASSWORD\":\"$NEW_PW\"}}"
-
-# Option B — edit k8s/secret.yaml and apply
-kubectl apply -f k8s/secret.yaml
-
-# Restart so pods pick up the new value
-kubectl -n simple-app rollout restart deploy/simple-app
-kubectl -n simple-app rollout status deploy/simple-app
-```
-
-> For production, replace the committed Secret with an External Secrets
-> Operator `ExternalSecret` sourcing from AWS Secrets Manager — rotation
-> then happens upstream and ESO re-syncs the Kubernetes Secret
-> automatically. A pod restart is still required for `envFrom` values.
-
 ## Update a ConfigMap value
 
-Same pattern as secrets — changes to env vars require a pod restart.
+Changes to env vars require a pod restart — `envFrom` does not hot-reload.
 
 ```bash
 # Edit k8s/configmap.yaml, then:
@@ -336,7 +308,7 @@ kubectl -n simple-app logs -l app=simple-app --previous
   docker image inspect $ECR_URL:$TAG --format '{{.Architecture}}'
   ```
   If `arm64`, rebuild with `--platform linux/amd64`.
-- Missing required env var — check ConfigMap / Secret keys match what the app
+- Missing required env var — check ConfigMap keys match what the app
   reads in [app/src/server.js](app/src/server.js).
 - Port collision — app listens on `PORT` env var; Deployment exposes 3000.
   Ensure ConfigMap's `PORT` matches `containerPort`.
@@ -432,7 +404,7 @@ subnets and security groups they're attached to.
 # 1. Delete the Ingress (ALB goes away; takes ~30s)
 kubectl delete -f k8s/ingress.yaml
 
-# 2. Remove the app (Deployment, Service, ConfigMap, Secret, namespace)
+# 2. Remove the app (Deployment, Service, ConfigMap, namespace)
 kubectl delete namespace simple-app
 
 # 3. Destroy the AWS infrastructure

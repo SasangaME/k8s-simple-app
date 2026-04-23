@@ -4,8 +4,6 @@ const app = express();
 const port = process.env.PORT || 3000;
 const appName = process.env.APP_NAME || 'k8s-simple-app';
 const appEnv = process.env.APP_ENV || 'development';
-const dbUser = process.env.DB_USER || 'unset';
-const dbPassword = process.env.DB_PASSWORD ? '***' : 'unset';
 
 app.use(express.json());
 
@@ -26,7 +24,6 @@ app.get('/api/items', (req, res) => {
       { id: 1, name: 'item-one' },
       { id: 2, name: 'item-two' },
     ],
-    db: { user: dbUser, password: dbPassword },
   });
 });
 
