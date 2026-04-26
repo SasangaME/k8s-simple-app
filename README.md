@@ -259,6 +259,101 @@ an ALB for this Ingress. Key annotations:
 - `healthcheck-path: /healthz` — the ALB's own health probe, independent of
   the Kubernetes readinessProbe.
 
+### Concepts cheatsheet
+
+Quick reference for the Kubernetes primitives used in this repo.
+
+#### `selector` vs `template` (in a Deployment)
+
+- **`selector`** — a label query that tells the Deployment *which Pods it
+  owns*. Immutable after creation. Used at runtime to find replicas.
+- **`template`** — a Pod blueprint used to *create* new Pods. Mutable;
+  changing it triggers a rollout. Its `metadata.labels` must be a superset of
+  `selector.matchLabels`, otherwise the API rejects the Deployment.
+
+Mnemonic: **selector identifies, template instantiates.**
+
+#### Why `selector` shows up in many places
+
+Selectors are Kubernetes' universal wiring mechanism — every object that
+needs to reference a dynamic set of Pods carries its own selector:
+
+| Object                  | Selector picks               | Purpose                                          |
+|-------------------------|------------------------------|--------------------------------------------------|
+| Deployment / ReplicaSet | Pods it owns                 | Manage replicas, drive rollouts                  |
+| Service                 | Pods to send traffic to      | Build the Endpoints list for load balancing      |
+| NetworkPolicy           | Pods the policy applies to   | Define firewall scope                            |
+| PodDisruptionBudget     | Pods covered by the budget   | Limit voluntary disruptions                      |
+
+They're duplicated (not centralized) on purpose: loose coupling via labels
+means a Service doesn't need to know which Deployment created the Pods, you
+can point multiple Services at overlapping Pod sets, and you can swap
+workloads (blue/green) without touching the Service.
+
+#### What a Service is for
+
+Pods are ephemeral — IPs change as they're rescheduled. A **Service** gives
+that set of Pods a stable virtual IP and DNS name
+(e.g. `simple-app.simple-app.svc.cluster.local`), load-balances across them,
+and auto-updates the backing Endpoints as Pods come and go. Common types:
+
+- **ClusterIP** (used here) — internal-only virtual IP.
+- **NodePort** — exposes the Service on a port on every node.
+- **LoadBalancer** — provisions a cloud load balancer.
+- **ExternalName** — DNS alias to an external host.
+
+In this repo the Service is ClusterIP because the **Ingress / ALB** is what's
+publicly exposed, and the ALB sends traffic directly to pod IPs
+(`target-type: ip`).
+
+#### Why endpoints end in `z` (`/healthz`, `/livez`, `/readyz`)
+
+A Google convention inherited by Kubernetes: the trailing `z` is a
+deliberately unusual suffix that won't collide with real application routes
+(a team might legitimately serve `/health` as a UI page; `/healthz` almost
+certainly won't clash). The `z` itself has no semantic meaning — it just
+namespaces diagnostic endpoints. In Kubernetes:
+
+- `/livez` — *liveness*: is the process alive? Failure → restart the pod.
+- `/readyz` — *readiness*: ready to serve traffic? Failure → remove from
+  Service endpoints (no restart).
+- `/healthz` — older generic form (deprecated on the API server in favor of
+  the two above, but still common in app code, including this repo).
+
+#### Ingress vs ClusterIP Service
+
+They operate at different layers and are complementary, not alternatives.
+
+|                    | ClusterIP Service                        | Ingress                                              |
+|--------------------|------------------------------------------|------------------------------------------------------|
+| OSI layer          | L4 (TCP/UDP)                             | L7 (HTTP/HTTPS)                                      |
+| Scope              | Inside cluster only                      | Typically external                                   |
+| Routing            | By port only                             | By host + path                                       |
+| TLS termination    | No                                       | Yes                                                  |
+| Implemented by     | kube-proxy (iptables/IPVS)               | An Ingress controller provisioning a real LB (ALB)   |
+| Usual cardinality  | One per workload                         | One Ingress often fronts many Services               |
+
+How they fit together in this repo:
+
+```
+Internet → ALB (created from Ingress) → Pods
+                                         ↑
+                             ClusterIP Service — gives Pods a stable
+                             identity; the ALB controller watches it
+                             to discover pod IPs, but the ALB sends
+                             traffic directly to them (target-type: ip).
+```
+
+The **Ingress** ([k8s/ingress.yaml](k8s/ingress.yaml)) provides the public
+hostname, HTTP routing, and (optionally) TLS. The **ClusterIP Service**
+([k8s/service.yaml](k8s/service.yaml)) provides a stable internal identity
+that the ALB controller and any in-cluster workload can resolve.
+
+**Why not just use a `LoadBalancer` Service?** It would also expose Pods
+externally, but it's L4, provisions a dedicated LB per Service (more cost),
+and doesn't do host/path routing or TLS. ClusterIP + Ingress lets one ALB
+front many apps with HTTP-aware rules.
+
 ## Terraform resources
 
 All files live in [terraform/](terraform/).
